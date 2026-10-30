@@ -1,0 +1,27 @@
+[project]
+name = "call-me-maybe"
+version = "0.1.0"
+description = "Function calling with constrained decoding on a small LLM"
+authors = [
+    {name = "Ilias", email = "ikolokou@student.42berlin.de"}
+]
+requires-python = ">=3.13"
+dependencies = [
+    "pydantic>=2.13.5,<3.0.0",
+    "numpy>=2.5.3,<3.0.0",
+    "torch>=2.0.0",
+    "transformers>=4.40.0",
+    "huggingface-hub>=0.20.0",
+    "accelerate==1.15.0"
+]
+
+[tool.uv]
+package = false
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[[tool.mypy.overrides]]
+module = "llm_sdk.*"
+ignore_errors = true
