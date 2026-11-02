@@ -1,151 +1,162 @@
 _This project has been created as part of the 42 curriculum by ikolokou._
 
-# Description
-In this project, we need to build an LLM model using the Qwen/Qwen3-0.6B model as our foundation. The input is prompts and functions in JSON files. The model must understand from the prompt which is the most suitable function to use in each case and also figure out the suitable parameters.
+# Call Me Maybe
 
-# Instructions
-1. If it's first time running this project, run `make install` to install all needed dependencies and create a virtual environment.
-2. To run it, use `make run`. Warning this take about 4 minutes to run.
-3. You can use the following flags for input in different directories with `uv run python -m src`: 
-    - `--functions_definition`: for the function definitions file
-    - `--input`: For the prompts JSON
-    - `--output`: For the output JSON
-3. For debugging mode, use `make debug`.
-4. To clean any cache, like pycache or mypy_cache, use `make clean`.
-5. To use flake8 and mypy, use `make lint`.
-6. For a stricter version of mypy use `make lint-strict`. This is optional, however.
+Function calling with a small language model, made reliable through
+**constrained decoding**.
 
-# Resources
-- [Constrained Decoding](https://www.aidancooper.co.uk/constrained-decoding/)
+Given a list of function definitions and a natural-language request, Call Me
+Maybe uses [Qwen3-0.6B](https://huggingface.co/Qwen/Qwen3-0.6B) to pick the
+right function and fill in its arguments with correctly typed values. The model
+never generates free text: at every decoding step, only the tokens that keep
+the output valid are allowed.
 
-_AI has been used mostly as a guide to help me when I'm stuck. It has been specifically instructed to guide me to the solution instead of offering it immediately. It also helped figure out any mypy errors._
-
-# Algortihm Explanation 
-
-The main idea of this project is to use **constraint decoding**. Even small model like Qwen, have a vocabulary of ~151K entries. If we approach this naively, then we would have to check each entry and find the most probable one to follow. That's expensive if an output could consist of even 50 tokens.
-
-Instead, we limit the pool of usable entries. For example, if we know we are looking for numbers, then only digits and the signs '.' and '-' are legal. From ~151K we manage to drop to just 12 entries!
-
-# Design Choices
-
-Function names are a special case. To increase accuracy, I calculate the probability of all function names and normalize to the length of the function name. Short names are easier to get predicted. 
-
-# Performance Analysis
-
-This algorithm manages to achieve a 100% accuracy on the test prompts. It runs for about 3.7 minutes.
-
-# Challenges Faced
-
-Function names would generally work with some simple constrained decoding. However, `fn_substitute_string_with_regex` would get under-predicted. That is mostly because of the length. So, instead of letting the LLM choose one immediately, I actually calculate the score for each name in each prompt and pick the one with the highest probability normalized for the length of the name.
-
-# Testing Strategy
-
-I validated mostly on the test prompts. However, I changed the pormpts to more weird configurations to see how succesful the model is. I also tested on ambiguous prompts, like "What is the sum of the square root of 4 and square root of 3".
-
-# Example Usage
-
-For the following prompt:
-
-```JSON
-  {
-    "prompt": "Replace all vowels in 'Programming is fun' with asterisks"
+```json
+{
+  "prompt": "Replace all vowels in 'Programming is fun' with asterisks",
+  "name": "fn_substitute_string_with_regex",
+  "parameters": {
+    "source_string": "Programming is fun",
+    "regex": "([aeiouAEIOU])",
+    "replacement": "*"
   }
+}
 ```
 
-the following functions were used:
-```JSON
+## Getting started
+
+Requirements: Python ≥ 3.13 and [uv](https://docs.astral.sh/uv/). The first
+run downloads the Qwen3-0.6B weights (~1.5 GB) from Hugging Face.
+
+```sh
+make install   # create .venv and install dependencies
+make run       # process data/input/function_calling_tests.json
+```
+
+Results are written to `data/output/function_calling_results.json`.
+
+Custom inputs and outputs:
+
+```sh
+uv run python -m call_me_maybe \
+    --functions_definition path/to/functions.json \
+    --input path/to/prompts.json \
+    --output path/to/results.json
+```
+
+Other targets: `make lint` (flake8 + mypy), `make lint-strict` (`mypy --strict`),
+`make debug` (runs under pdb) and `make clean`.
+
+## Input format
+
+**Function definitions** (`--functions_definition`) are a JSON list of functions. Each parameter's type
+is `string`, `number`, `boolean` or `null`:
+
+```json
 [
   {
     "name": "fn_add_numbers",
     "description": "Add two numbers together and return their sum.",
     "parameters": {
-      "a": {
-        "type": "number"
-      },
-      "b": {
-        "type": "number"
-      }
+      "a": {"type": "number"},
+      "b": {"type": "number"}
     },
-    "returns": {
-      "type": "number"
-    }
-  },
-  {
-    "name": "fn_greet",
-    "description": "Generate a greeting message for a person by name.",
-    "parameters": {
-      "name": {
-        "type": "string"
-      }
-    },
-    "returns": {
-      "type": "string"
-    }
-  },
-  {
-    "name": "fn_reverse_string",
-    "description": "Reverse a string and return the reversed result.",
-    "parameters": {
-      "s": {
-        "type": "string"
-      }
-    },
-    "returns": {
-      "type": "string"
-    }
-  },
-  {
-    "name": "fn_get_square_root",
-    "description": "Calculate the square root of a number.",
-    "parameters": {
-      "a": {
-        "type": "number"
-      }
-    },
-    "returns": {
-      "type": "number"
-    }
-  },
-  {
-    "name": "fn_substitute_string_with_regex",
-    "description": "Replace all occurrences matching a regex pattern in a string.",
-    "parameters": {
-      "source_string": {
-        "type": "string"
-      },
-      "regex": {
-        "type": "string"
-      },
-      "replacement": {
-        "type": "string"
-      }
-    },
-    "returns": {
-      "type": "string"
-    }
+    "returns": {"type": "number"}
   }
 ]
 ```
 
-When ran, the command line shows a loading bar to inform how many prompts have been processed:
-```bash
-Overheating the PC...:  [█████·························] 2/11 (18%)
+**Prompts** (`--input`) are a JSON list of objects with a `prompt` key:
+
+```json
+[
+  {"prompt": "What is the sum of 2 and 3?"}
+]
 ```
 
-And at the end, it shows how long it took to run the prompts:
-```bash
-Runtime was 3.7
+Both files are validated with pydantic before the model is loaded. Invalid
+input (malformed JSON, missing keys, unknown types, duplicate function names)
+is reported with a clear error and exit status `1`.
+
+## How it works
+
+### Constrained decoding
+
+Even a small model like Qwen3-0.6B has a vocabulary of ~150K tokens. Letting
+it generate freely and then parsing the result is fragile: it might invent a
+function name, write `"five"` for a number, or never close a string. Instead,
+each decoding step masks out every token that would make the output invalid,
+and picks the most likely of the remaining ones:
+
+| Value type | Allowed tokens |
+|---|---|
+| number | Tokens made of `0-9`, `-` and `.` that keep the text a valid number. `,` ends the value. |
+| string | Any token. A token containing `"` ends the value. |
+| boolean | Only `true` or `false`. |
+
+For numbers this shrinks the candidate set from ~150K tokens to a few hundred.
+Every value is also capped in length, so decoding always ends.
+
+### Choosing the function
+
+The model is shown a short instruction, the function definitions as JSON, and
+the beginning of a JSON object to complete:
+
+```
+{
+	"prompt": "What is the sum of 2 and 3?",
+	"name": "
 ```
 
-At the end, the user can find the output in `data/output/function_calling_results.json`. In this case, here is the output:
-```JSON
-  {
-    "prompt": "Replace all vowels in 'Programming is fun' with asterisks",
-    "name": "fn_substitute_string_with_regex",
-    "parameters": {
-      "source_string": "Programming is fun",
-      "regex": "([aeiouAEIOU])",
-      "replacement": "*"
-    }
-  }
+Rather than generating the name token by token, every known function name is
+scored by its **average token log-probability**, and the best one wins.
+Averaging matters: summing log-probabilities penalises long names such as
+`fn_substitute_string_with_regex`, which were consistently under-predicted
+before this change.
+
+### Filling in the arguments
+
+The chosen name and `"parameters": {` are appended to the context. Then, for
+each parameter in order, the parameter's key is appended and its value is
+decoded with the constraints above.
+
+## Results
+
+On the 11 prompts of the original 42 test set, the decoder chose the correct
+function and arguments for every prompt (100%), taking about 3.7 minutes on a
+laptop CPU. Most of that time goes to model forward passes: the provided SDK
+re-runs the whole context for every generated token.
+
+### Limitations
+
+- A 0.6B model makes mistakes that the constraints cannot catch. For example,
+  in "Add -4.5 and 10.25", the minus sign is sometimes dropped (`4.5`). The
+  output is always well-formed, but not always right.
+- The SDK has no KV cache, so every generated token re-runs the full context. This makes long string arguments slow.
+
+I also tested ambiguous or unusual prompts (e.g. "What is the sum of the square
+root of 4 and square root of 3"), to see how far the model can be pushed.
+
+## Project structure
+
 ```
+Call-Me-Maybe/
+├── call_me_maybe/
+│   ├── __main__.py     # command-line entry point
+│   ├── schemas.py      # pydantic models and input loading
+│   ├── pipeline.py     # prompt construction and the per-prompt loop
+│   └── decoder.py      # constrained decoding on top of the LLM
+├── llm_sdk/            # model wrapper provided by the 42 subject
+├── data/input/         # example function definitions and prompts
+├── Makefile
+└── pyproject.toml
+```
+
+## Resources
+
+- [Constrained decoding (Aidan Cooper)](https://www.aidancooper.co.uk/constrained-decoding/)
+- [Qwen3-0.6B model card](https://huggingface.co/Qwen/Qwen3-0.6B)
+
+AI was used mostly as a guide when I was stuck. It was explicitly told to steer
+me towards the solution rather than give it to me. It also helped me resolve
+mypy errors.
