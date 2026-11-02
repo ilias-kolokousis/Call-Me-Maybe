@@ -2,6 +2,7 @@
 name = "call-me-maybe"
 version = "0.1.0"
 description = "Function calling with constrained decoding on a small LLM"
+readme = "README.md"
 authors = [
     {name = "Ilias", email = "ikolokou@student.42berlin.de"}
 ]
@@ -15,12 +16,14 @@ dependencies = [
     "accelerate==1.15.0"
 ]
 
+[dependency-groups]
+dev = [
+    "flake8>=7.0",
+    "mypy>=1.10",
+]
+
 [tool.uv]
 package = false
-
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
 
 [[tool.mypy.overrides]]
 module = "llm_sdk.*"
